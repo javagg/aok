@@ -1,0 +1,174 @@
+###
+# This YAML file tells the AOK authentication system how it will run.
+#
+###
+
+port: 4567 # main port to run AOK on.
+strategy:
+  # Pick one of the following authetication strategies and fill in all the
+  # parameters required by that strategy:
+  use: builtin # or ldap
+  #------------------------------------------------------------------------------
+  # 1) `builtin` Classic Stackato userid/login strategy.
+  #------------------------------------------------------------------------------
+  # no additional config needed for builtin strategy
+
+  #------------------------------------------------------------------------------
+  # 2) `ldap` Your LDAP server.
+  #------------------------------------------------------------------------------
+  ldap:
+    host: localhost
+    port: 389
+    method: plain # other valid settings are: ssl, tls
+    base: 'dc=example, dc=com'
+    # uid is the LDAP attribute name for the user name in the login
+    # form. Typically AD would be 'sAMAccountName' or 'UserPrincipalName',
+    # while OpenLDAP is 'uid'.
+    uid: 'sAMAccountName'
+    # email is the LDAP attribute containing the user's fully qualified
+    # email address. An email address attribute is necessary for AOK to
+    # work properly with the cloud controller. This may be a scalar
+    # attribute or an array of attributes to search. The default is
+    # shown. The first non-null attribute will be used (AOK will not
+    # validate that this is an email address).
+    email:
+     - mail
+     - email
+     - userPrincipalName
+    # Next two are optional. Anonymous access will be used if omitted.
+    #bind_dn: 'default_bind_dn' #optional, default credentials for user lookup
+    #password: 'password' #optional, default credentials for user lookup
+
+    # Optional. The user with this uid should be given admin privileges.
+    # You should have something in order to be able to bootstrap
+    # your installation when using LDAP. The user will be granted admin
+    # the first time they log in, and will remain an admin if this setting
+    # is removed.
+    #admin_user: johnDoe
+
+    # name_proc allows you to match the user name entered with the
+    # format of the uid attributes. For example, value of
+    # 'sAMAccountName' in AD contains only the windows user name.
+    # If your user prefers using email to login, a name_proc as below
+    # will trim the email string down to just the windows login name.
+    # In summary, use name_proc to fill the gap between the submitted
+    # username and LDAP uid attribute value. Must be valid ruby code.
+    # It is possible to open security holes in Stackato through this
+    # setting, since the provided code will be accepting arbitrary user
+    # input. Administrators are urged to use this setting only when
+    # absolutely necessary, and to check the entered code thoroughly
+    # for possible security implications.
+    # name_proc: "Proc.new {|name| name.gsub(/@.*$/,'')}" #optional
+
+    # try_sasl and sasl_mechanisms are optional.
+    # Use them to initialize a SASL connection to server. If you are not
+    # familiar with these authentication methods, please just avoid them.
+    # try_sasl: true
+    # sasl_mechanisms: DIGEST-MD5 # or GSS-SPNEGO
+
+    # This option will use the user's email address as their username in 
+    # Stackato, like Stackato 2.x did. This is helpful if importing data
+    # and users from Stackato 2.x.
+    # use_email_for_username: true
+
+    # group_query and group_attribute are necessary to utilize authn/authz
+    # based on LDAP groups in AOK. Specifying group_query will cause AOK to
+    # perform an additional search on the LDAP server after a user has
+    # successfully authenticated in order to fetch their group membership.
+    # %{username} will be replaced with the value of the field specified by
+    # uid. %{dn} will be replaced by the dn of the authenticated user. If using
+    # this option, you must also specify group_attribute. Set group_query to nil
+    # or false to disable this additional query.
+    # group_attribute is the LDAP attribute to extract from the entries returned
+    # by group_query. Values of this field are what the allowed_groups and
+    # admin_groups settings match against.
+    # group_query: (&(objectClass=posixGroup)(memberUid=%{username}))
+    # group_attribute: cn
+    #
+    # If group_query and group_attribute are configured, specify the names of groups
+    # here that are allowed to access Stackato. This should be an array of string 
+    # group names.
+    # allowed_groups:
+    #  - friends
+    #  - frenemies
+    #
+    # If group_query and group_attribute are configured, specify the names of groups
+    # whose members should be granted admin privilege. The user will be granted admin
+    # the first time they log in while a member of a listed LDAP group, and will 
+    # remain an admin even if they are later removed from the LDAP group. This 
+    # should be an array of Strings.
+    # admin_groups:
+    #  - managers
+    #  - sysadmins
+
+  #------------------------------------------------------------------------------
+  # 3) `google` Your "Google Apps for Business" domain
+  #------------------------------------------------------------------------------
+  google_apps:
+    domain: example.com # your company's email domain as used by google apps
+
+# This only dictates what config field gets updated by kato when reconfiguring
+# stackato for cluster use. You almost certainly should not change this.
+rails_environment: production
+
+# Database used by aok for sessions and to store users with
+# the `builtin` strategy
+database_environment:
+  production:
+    database: aok
+    host: localhost
+    port: 5432
+    encoding: utf8
+    username: postgres
+    password: root
+    adapter: postgresql
+    timeout: 2000
+    template: template0 # Required for utf8 encoding
+  development:
+    adapter: sqlite3
+    database: db/aok.sqlite3
+    encoding: utf8
+    timeout: 10000
+  test:
+    adapter: sqlite3
+    database: db/test.sqlite3
+    encoding: utf8
+
+oauth:
+  clients:
+    cf:
+      authorized_grant_types: password,implicit
+      authorities: uaa.none
+      scope: cloud_controller.read,cloud_controller.write,openid,password.write,cloud_controller.admin,scim.read,scim.write
+    srest:
+      secret: 'changeme'
+      authorized_grant_types: client_credentials
+      authorities: uaa.resource,cloud_controller.admin
+    cloud_controller:
+      secret: cloudcontrollersecret
+      authorized_grant_types: client_credentials
+      authorities: scim.read,scim.write,clients.read,clients.write
+      scope: uaa.none
+  users:
+    default_authorities:
+        - openid
+        - scim.me
+        - cloud_controller.read
+        - cloud_controller.write
+        - password.write
+        - scim.userids
+        - uaa.user
+        - approvals.me
+
+
+scim:
+  users: []
+#     - paul|wombat|paul@test.org|Paul|Smith|uaa.admin
+#     - stefan|wallaby|stefan@test.org|Stefan|Schmidt
+#     - vcap_tester@vmware.com|dr0wssaPH@ck|vcap_tester@vmware.com|VCAP|Tester
+
+
+jwt:
+  token:
+    signing_key: changeme
+    verification_key: changeme

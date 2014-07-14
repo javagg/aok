@@ -1,0 +1,12 @@
+# ToDo:
+
+# Things to test:
+- All valid endpoints with valid data
+- All valid endpoints with invalid data
+  - Parameter validation
+- Invalid endpoints
+- Status codes for all endpoints
+  - Including failures
+- Expected JSON payloads
+- Valid database state
+- utf8 data

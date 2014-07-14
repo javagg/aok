@@ -1,0 +1,53 @@
+#!/usr/bin/env ruby
+puts "aok starting up at #{Time.now}"
+
+require 'eventmachine'
+require 'thin'
+require 'kato/local/node'
+
+app = Rack::Adapter.load(File.join(File.dirname(__FILE__), '..', 'config.ru'))
+
+EM.run do
+  bind_address = Kato::Local::Node.get_local_node_id
+  server = Thin::Server.new(bind_address, AppConfig[:port], :signals => false)
+
+  # Set default time zone to UTC to prevent ActiveRecord from converting times to local timezone before storing
+  ActiveRecord::Base.default_timezone = :utc
+
+  ENV['RACK_ENV'] = 'production'
+  server.app = app
+  # The routers proxying to us handle killing inactive connections. Set an upper limit
+  # just to be safe.
+  server.timeout = 15 * 60 # 15 min
+  server.start
+
+  def register_component(message_bus)
+    VCAP::Component.register(
+      :type => 'AOK',
+      :host => Kato::Local::Node.get_local_node_id,
+      #:index => @config[:index],
+      :config => AppConfig,
+      :nats => message_bus,
+      :logger => ApplicationController.logger,
+      #:log_counter => @log_counter
+    )
+  end
+
+  def registrar
+    @registrar ||= Cf::Registrar.new(
+        :mbus => CCConfig[:message_bus_servers].first,
+        :host => Kato::Local::Node.get_local_node_id,
+        :port => AppConfig[:port],
+        :uri => CCConfig[:external_domain].sub(/^api/, 'aok'),
+        :tags => {:component => "AOK"},
+        #:index => @config[:index]
+    )
+  end
+
+  require "cf_message_bus/message_bus"
+  message_bus = CfMessageBus::MessageBus.new(:uri => CCConfig[:message_bus_servers].first, :logger => ApplicationController.logger)
+  register_component(message_bus)
+  registrar.register_with_router
+
+
+end
